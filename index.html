@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crowdfunding - Empowering Dreams</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(135deg, #4b6cb7, #182848);
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    nav {
+      position: fixed;
+      top: 0;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 40px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .logo {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #00d4ff;
+      letter-spacing: 1px;
+    }
+
+    nav a {
+      color: white;
+      text-decoration: none;
+      margin-left: 20px;
+      transition: 0.3s;
+    }
+
+    nav a:hover {
+      color: #00d4ff;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+      text-align: center;
+      padding: 40px;
+      max-width: 600px;
+      margin-top: 120px;
+      animation: fadeIn 1s ease-in-out;
+    }
+
+    h1 {
+      font-size: 2rem;
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    p {
+      font-size: 1rem;
+      color: #555;
+    }
+
+    hr {
+      width: 60%;
+      border: none;
+      border-top: 2px solid #ddd;
+      margin: 20px auto;
+    }
+
+    .slogan {
+      font-size: 1.2rem;
+      color: #007bff;
+      margin-bottom: 10px;
+      font-weight: 500;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <nav>
+    <div class="logo">🌐 Crowdfunding</div>
+    <div>
+      <a href="index.php">Home</a>
+      <a href="about.php">About Us</a>
+      <a href="login.php">Login</a>
+      <a href="register.php">Register</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <h1>Crowdfunding Projects</h1>
+    <p class="slogan">Empowering Dreams, Connecting Futures</p>
+    <hr />
+    <p>No projects available yet.</p>
+  </div>
+  <div class="text-center mb-4">
+  <img src="<?= $profile_img ?>" alt="Profile" 
+       style="width:100px; height:100px; border-radius:50%; object-fit:cover; cursor:pointer;"
+       id="profilePic">
+</div>
+
+<script>
+document.getElementById('profilePic').addEventListener('click', function() {
+  window.location.href = 'profile.php';
+});
+</script>
+
+</body>
+</html>
