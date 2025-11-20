@@ -1,161 +1,150 @@
-<?php 
+<?php
 session_start();
-require 'db_connect.php'; // Uses $pdo
+require 'db_connect.php';
+include_once 'header.php'; // logo + nav
 
 $msg = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
     $username = trim($_POST['username'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $password = trim($_POST['password'] ?? '');
     $confirm_password = trim($_POST['confirm_password'] ?? '');
-    $role = $_POST['role'] ?? 'client';
+    $role = $_POST['role'] ?? 'investor';
 
-    if ($username === '' || $email === '' || $password === '' || $confirm_password === '') {
-        $msg = 'All fields are required.';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $msg = 'Invalid email format.';
-    } elseif ($password !== $confirm_password) {
-        $msg = 'Passwords do not match.';
-    } else {
-        // Strong password validation
-        if (!preg_match('/[a-z]/', $password) ||
-            !preg_match('/[A-Z]/', $password) ||
-            !preg_match('/[0-9]/', $password) ||
-            !preg_match('/[!@#\$%\^&\*\(\)_\+\-=\[\]{};:"\\|,.<>\/?]/', $password) ||
-            strlen($password) < 6) {
-            $msg = 'Password must include uppercase, lowercase, number, and special character.';
+    $min_len = 8;
+    $max_len = 20;
+
+    if ($username && $email && $password && $confirm_password) {
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $msg = "Please enter a valid email address.";
+        } elseif (strlen($password) < $min_len) {
+            $msg = "Password must be at least $min_len characters.";
+        } elseif (strlen($password) > $max_len) {
+            $msg = "Password must not exceed $max_len characters.";
+        } elseif ($password !== $confirm_password) {
+            $msg = "Passwords do not match.";
         } else {
-            // Check if username/email exists
-            $check = $pdo->prepare("SELECT id FROM users WHERE username = :username OR email = :email LIMIT 1");
-            $check->execute(['username' => $username, 'email' => $email]);
-            if ($check->fetch()) {
-                $msg = 'Username or Email already exists.';
-            } else {
-                // ✅ Corrected: matches your table column `profile_pic`
-                $hashed = password_hash($password, PASSWORD_DEFAULT);
-                $insert = $pdo->prepare("INSERT INTO users (username, email, password, role, profile_pic) 
-                                         VALUES (:username, :email, :password, :role, :pic)");
-                $insert->execute([
-                    'username' => $username,
-                    'email' => $email,
-                    'password' => $hashed,
-                    'role' => strtolower($role),
-                    'pic' => 'uploads/default.png'
-                ]);
 
-                $_SESSION['user_id'] = $pdo->lastInsertId();
-                $_SESSION['username'] = $username;
-                $_SESSION['role'] = strtolower($role);
-                $_SESSION['profile_pic'] = 'uploads/default.png';
+            // ============ NEW RULE: Max 2 accounts per email (1 Investor + 1 Client) ============
+            $checkEmail = $pdo->prepare("SELECT role FROM users WHERE email = ?");
+            $checkEmail->execute([$email]);
+            $existingRoles = $checkEmail->fetchAll(PDO::FETCH_COLUMN);
 
-                // ✅ Redirect based on role
-                if ($role === 'admin') {
-                    header("Location: admin_dashboard.php");
-                } elseif ($role === 'client') {
-                    header("Location: client_dashboard.php");
-                } elseif ($role === 'donor') {
-                    header("Location: donor_dashboard.php");
+            if (count($existingRoles) >= 2) {
+                $msg = "This email has already been used. You cannot register again.";
+            }
+            elseif (count($existingRoles) == 1) {
+                $alreadyRole = $existingRoles[0];
+                if ($role === $alreadyRole) {
+                    $msg = "This email is already registered as " . ucfirst($alreadyRole) . ". You cannot create another $alreadyRole account.";
                 }
-                exit;
+            }
+
+            if (!$msg) {
+                $checkUser = $pdo->prepare("SELECT id FROM users WHERE username = ?");
+                $checkUser->execute([$username]);
+                if ($checkUser->rowCount() > 0) {
+                    $msg = "This username is already taken.";
+                }
+            }
+
+            if (!$msg) {
+                try {
+                    $hashed = password_hash($password, PASSWORD_DEFAULT);
+                    $stmt = $pdo->prepare("INSERT INTO users (username,email,password,role,status) VALUES (?,?,?,?,?)");
+                    $stmt->execute([$username, $email, $hashed, $role, 'active']);
+
+                    header("Location: login.php");
+                    exit;
+
+                } catch (PDOException $e) {
+                    $msg = "Registration failed. Try again.";
+                }
             }
         }
+
+    } else {
+        $msg = "Please fill all fields.";
     }
 }
 ?>
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Register — Crowdfunding</title>
-<link href="https://fonts.googleapis.com/css2?family=Poppins&display=swap" rel="stylesheet">
+<meta charset="UTF-8" />
+<title>Register - DevVest</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+<link href="style.css" rel="stylesheet">
+
 <style>
-:root{--blue1:#007bff;--blue2:#00aaff;--card:#fff;}
-*{box-sizing:border-box;}
-body{margin:0;font-family:Poppins,Arial,sans-serif;background:linear-gradient(135deg,var(--blue2),var(--blue1));height:100vh;display:flex;align-items:center;justify-content:center;}
-.card{width:380px;background:var(--card);border-radius:14px;padding:30px;box-shadow:0 8px 30px rgba(0,0,0,0.12);text-align:center;}
-h2{margin:0 0 18px;color:#0b3a66;}
-input,select{width:100%;padding:11px;margin:8px 0;border:1px solid #ddd;border-radius:8px;font-size:14px;}
-button{width:100%;background:var(--blue1);color:#fff;border:0;padding:11px;border-radius:8px;font-weight:600;margin-top:12px;cursor:pointer;transition:0.3s;}
-button:hover{opacity:0.9;}
-.error{color:#b90000;margin-bottom:10px;}
-.link{color:#004aad;text-decoration:underline;}
-.small{font-size:14px;color:#333;margin-top:12px;}
-.toggle-btn{position:absolute;right:10px;top:12px;cursor:pointer;color:#007bff;}
-.strength-wrap{margin-top:8px;}
-.strength-bar{width:100%;height:10px;background:#eee;border-radius:6px;overflow:hidden;margin-top:6px;}
-.strength-fill{height:100%;width:0%;background:linear-gradient(90deg,#f44336,#ff9800,#4caf50);transition:width 0.25s ease;}
-.strength-label{margin-top:8px;font-weight:600;text-align:left;}
-.char-count{font-size:13px;color:#555;margin-top:4px;text-align:right;}
+body.auth-page { font-family: 'Poppins', sans-serif; background:#eef2f7; margin:0; padding:0; }
+.form-container { max-width:400px; margin:120px auto 50px auto; padding:30px; background:#fff; border-radius:10px; box-shadow:0 0 12px rgba(0,0,0,0.1); }
+.form-container h2 { text-align:center; margin-bottom:20px; color:#333; }
+.form-container input, .form-container select { width:100%; padding:10px; margin-bottom:15px; border-radius:6px; border:1px solid #ccc; font-size:15px; }
+button { width:100%; padding:10px; border:none; border-radius:6px; background:#3B4BFF; color:#fff; font-size:16px; cursor:pointer; }
+button:hover { opacity:0.9; }
+.link { display:block; margin-top:15px; text-align:center; color:#2563eb; }
+.error { background:#ffe5e5; padding:10px; border-radius:6px; border-left:4px solid red; text-align:center; color:#b30000; margin-bottom:15px; }
+.password-wrapper { position:relative; }
+.toggle-password { position:absolute; top:50%; right:10px; transform:translateY(-50%); cursor:pointer; font-size:18px; }
 </style>
 </head>
-<body>
-<div class="card">
-<h2>Register</h2>
-<?php if($msg): ?><div class="error"><?= htmlspecialchars($msg) ?></div><?php endif; ?>
+<body class="auth-page">
 
-<form method="post" action="" id="regForm">
-    <input type="text" name="username" placeholder="Username" required maxlength="30" value="<?= htmlspecialchars($_POST['username'] ?? '') ?>">
-    <input type="email" name="email" placeholder="Email" required maxlength="50" value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
+<div class="form-container">
+    <h2>Create Account</h2>
 
-    <div style="position:relative;">
-        <input type="password" id="password" name="password" placeholder="Password" required minlength="6" maxlength="20">
-        <span id="togglePass" class="toggle-btn" onclick="toggle('password','togglePass')">👁️</span>
-    </div>
+    <?php if($msg): ?>
+        <div class="error"><?= htmlspecialchars($msg) ?></div>
+    <?php endif; ?>
 
-    <div class="strength-wrap">
-        <div class="strength-bar"><div id="strengthFill" class="strength-fill"></div></div>
-        <div id="strengthLabel" class="strength-label">Strength: —</div>
-        <div id="charCount" class="char-count">0 / 20</div>
-    </div>
+    <form method="POST">
+        <input type="text" name="username" placeholder="Username" required>
+        <input type="email" name="email" placeholder="Email" required pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$" title="Enter a valid email (example@gmail.com)">
 
-    <div style="position:relative;">
-        <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm Password" required minlength="6" maxlength="20">
-        <span id="toggleConfirm" class="toggle-btn" onclick="toggle('confirm_password','toggleConfirm')">👁️</span>
-    </div>
+        <div class="password-wrapper">
+            <input type="password" name="password" id="password" placeholder="Password" required minlength="8" maxlength="20">
+            <span class="toggle-password" onclick="togglePass()">👁️</span>
+        </div>
 
-    <select name="role" required>
-        <option value="client" <?= (($_POST['role'] ?? '') === 'client') ? 'selected' : '' ?>>Client</option>
-        <option value="donor" <?= (($_POST['role'] ?? '') === 'donor') ? 'selected' : '' ?>>Donor</option>
-        <option value="admin" <?= (($_POST['role'] ?? '') === 'admin') ? 'selected' : '' ?>>Admin</option>
-    </select>
+        <div class="password-wrapper">
+            <input type="password" name="confirm_password" id="confirm_password" placeholder="Confirm Password" required minlength="8" maxlength="20">
+            <span class="toggle-password" onclick="toggleConfirm()">👁️</span>
+        </div>
 
-    <button type="submit">Register</button>
-    <p class="small">Already have an account? <a class="link" href="login.php">Login</a></p>
-</form>
+        <select name="role" required>
+            <option value="investor">Investor</option>
+            <option value="client">Client</option>
+        </select>
+
+        <button type="submit">Register</button>
+    </form>
+
+    <a href="login.php" class="link">Already have an account? Login</a>
 </div>
 
 <script>
-function toggle(fieldId, toggleId){
-    const field = document.getElementById(fieldId);
-    const icon = document.getElementById(toggleId);
-    if(field.type === 'password'){ field.type='text'; icon.textContent='🙈'; } 
-    else { field.type='password'; icon.textContent='👁️'; }
+function togglePass() {
+    let input = document.getElementById("password");
+    const icon = document.querySelectorAll(".toggle-password")[0];
+    input.type = input.type === "password" ? "text" : "password";
+    icon.textContent = input.type === "password" ? "👁️" : "🙈";
 }
-
-// Password strength and char count
-const pwd = document.getElementById('password');
-const fill = document.getElementById('strengthFill');
-const label = document.getElementById('strengthLabel');
-const charCount = document.getElementById('charCount');
-
-pwd.addEventListener('input', function(){
-    const val = pwd.value;
-    charCount.textContent = val.length + ' / 20';
-
-    let score=0;
-    if(/[a-z]/.test(val)) score++;
-    if(/[A-Z]/.test(val)) score++;
-    if(/[0-9]/.test(val)) score++;
-    if(/[!@#\$%\^&\*\(\)_\+\-=\[\]{};:"\\|,.<>\/?]/.test(val)) score++;
-    if(val.length>=6) score++;
-
-    fill.style.width = (score/5*100)+'%';
-    if(score<=2) label.textContent='Strength: Weak';
-    else if(score===3) label.textContent='Strength: Medium';
-    else label.textContent='Strength: Strong';
-});
+function toggleConfirm() {
+    let input = document.getElementById("confirm_password");
+    const icon = document.querySelectorAll(".toggle-password")[1];
+    input.type = input.type === "password" ? "text" : "password";
+    icon.textContent = input.type === "password" ? "👁️" : "🙈";
+}
 </script>
+
+<!-- Same professional footer as about.php & login.php -->
+<?php include 'footer.php'; ?>
+
 </body>
 </html>

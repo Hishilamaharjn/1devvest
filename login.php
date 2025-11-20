@@ -1,110 +1,133 @@
 <?php
 session_start();
-require 'db_connect.php'; // Uses $pdo
+require 'db_connect.php';
+include 'header.php';
 
 $msg = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username'] ?? '');
+
+    $username_email = trim($_POST['username_email'] ?? '');
     $password = trim($_POST['password'] ?? '');
 
-    if ($username === '' || $password === '') {
-        $msg = 'All fields are required.';
-    } else {
-        $stmt = $pdo->prepare("SELECT id, username, password, role, profile_pic FROM users WHERE username = :u OR email = :e");
-        $stmt->execute(['u' => $username, 'e' => $username]);
+    if ($username_email && $password) {
+
+        // Try login by username first
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ? AND status = 'active'");
+        $stmt->execute([$username_email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($user && password_verify($password, $user['password'])) {
-            // ✅ Normalize role value
-            $role = strtolower(trim($user['role']));
+        // If not found → try by email (supports Investor + Client with same email)
+        if (!$user) {
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? AND status = 'active'");
+            $stmt->execute([$username_email]);
+            $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // ✅ Store session
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['username'] = $user['username'];
-            $_SESSION['role'] = $role;
-            $_SESSION['profile_pic'] = $user['profile_pic'] ?? 'uploads/default.png';
-
-            // ✅ Remember me cookie
-            if (isset($_POST['remember'])) {
-                setcookie('remember_user', $user['username'], time() + 86400 * 7, "/");
+            if (count($users) === 0) {
+                $msg = "User not found.";
             } else {
-                setcookie('remember_user', '', time() - 3600, "/");
+                foreach ($users as $u) {
+                    if (password_verify($password, $u['password'])) {
+                        $user = $u;
+                        break;
+                    }
+                }
+                if (!$user) $msg = "Invalid password.";
             }
+        } else {
+            if (!password_verify($password, $user['password'])) {
+                $msg = "Invalid password.";
+                $user = false;
+            }
+        }
 
-            // ✅ Redirect based on role
-            if ($role === 'admin') {
-                header("Location: admin_dashboard.php");
-            } elseif ($role === 'client') {
-                header("Location: client_dashboard.php");
-            } elseif ($role === 'donor') {
-                header("Location: donor_dashboard.php");
+        // Successful login
+        if ($user) {
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['role'] = $user['role'];
+            $_SESSION['username'] = $user['username'];
+            $_SESSION['email'] = $user['email'];
+
+            if ($user['role'] === 'admin') {
+                header("Location: admin/admin_dashboard.php");
+            } elseif ($user['role'] === 'client') {
+                header("Location: client/client_dashboard.php");
             } else {
-                header("Location: login.php");
+                header("Location: investor/investor_dashboard.php");
             }
             exit;
-        } else {
-            $msg = 'Invalid username/email or password.';
         }
+    } else {
+        $msg = "Please enter username/email and password.";
     }
 }
 ?>
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Login — Crowdfunding</title>
-<link href="https://fonts.googleapis.com/css2?family=Poppins&display=swap" rel="stylesheet">
-<style>
-:root{--blue1:#007bff;--blue2:#00aaff;--card:#fff;}
-*{box-sizing:border-box;}
-body{margin:0;font-family:Poppins,Arial,sans-serif;background:linear-gradient(135deg,var(--blue2),var(--blue1));height:100vh;display:flex;align-items:center;justify-content:center;}
-.card{width:360px;background:var(--card);border-radius:14px;padding:30px;box-shadow:0 8px 30px rgba(0,0,0,0.12);text-align:center;}
-h2{margin:0 0 18px;color:#0b3a66;}
-input[type=text],input[type=password]{width:100%;padding:11px;margin:8px 0;border:1px solid #ddd;border-radius:8px;font-size:14px;}
-button{width:100%;background:var(--blue1);color:#fff;border:0;padding:11px;border-radius:8px;font-weight:600;margin-top:12px;cursor:pointer;transition:0.3s;}
-button:hover{opacity:0.9;}
-.error{color:#b90000;margin-bottom:10px;}
-.controls{display:flex;align-items:center;gap:8px;justify-content:flex-start;margin-top:6px;}
-.toggle-btn{position:absolute;right:10px;top:12px;cursor:pointer;color:#007bff;}
-.link{color:#004aad;text-decoration:underline;}
-.small{font-size:14px;color:#333;margin-top:12px;}
-</style>
+    <meta charset="UTF-8">
+    <title>Login - DevVest</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <link href="style.css" rel="stylesheet">
+    <style>
+        html, body {margin:0;padding:0;min-height:100vh;display:flex;flex-direction:column;background:#eef2f7;font-family:'Poppins',sans-serif;}
+        .form-container {
+            max-width:450px;margin:100px auto 60px;padding:40px 35px;background:#fff;border-radius:12px;
+            box-shadow:0 0 15px rgba(0,0,0,0.12);flex:1 0 auto;
+        }
+        .form-container h2 {text-align:center;margin-bottom:25px;color:#333;font-size:28px;}
+        .form-container input {width:100%;padding:12px;margin-bottom:18px;border-radius:6px;border:1px solid #ccc;font-size:16px;}
+        button {width:100%;padding:12px;background:#3B4BFF;color:#fff;border:none;border-radius:6px;font-size:17px;cursor:pointer;}
+        button:hover {opacity:0.9;}
+        .link {display:block;margin-top:15px;text-align:center;color:#2563eb;}
+        .password-wrapper {position:relative;}
+        .toggle-password {
+            position:absolute;right:10px;top:50%;transform:translateY(-50%);
+            cursor:pointer;font-size:20px;user-select:none;
+        }
+        .error-msg {text-align:center;color:red;margin-bottom:15px;font-weight:500;}
+    </style>
 </head>
 <body>
-<div class="card">
-<h2>Login</h2>
-<?php if($msg): ?><div class="error"><?= htmlspecialchars($msg) ?></div><?php endif; ?>
 
-<form method="post" action="">
-    <input type="text" name="username" placeholder="Username or Email"
-           required minlength="3" maxlength="50"
-           value="<?= htmlspecialchars($_COOKIE['remember_user'] ?? '') ?>">
+<div class="form-container">
+    <h2>Login</h2>
 
-    <div style="position:relative;">
-        <input type="password" id="password" name="password" placeholder="Password"
-               required minlength="6" maxlength="20">
-        <span id="toggle" class="toggle-btn" onclick="togglePass()">👁️</span>
-    </div>
+    <?php if(!empty($msg)): ?>
+        <p class="error-msg"><?= htmlspecialchars($msg) ?></p>
+    <?php endif; ?>
 
-    <div class="controls">
-        <label><input type="checkbox" name="remember" <?= isset($_COOKIE['remember_user'])?'checked':'' ?>> Remember me</label>
-    </div>
+    <form method="POST">
+        <input type="text" name="username_email" placeholder="Username or Email" required>
+        <div class="password-wrapper">
+            <input type="password" name="password" id="password" placeholder="Password" required>
+            <span class="toggle-password" onclick="togglePassword()">👁️</span>
+        </div>
+        <button type="submit">Login</button>
+    </form>
 
-    <button type="submit">Login</button>
-
-    <p class="small">Don't have an account? <a class="link" href="register.php">Register</a></p>
-</form>
+    <a href="register.php" class="link">Don't have an account? Register</a>
 </div>
 
 <script>
-function togglePass(){
-    const p = document.getElementById('password');
-    const t = document.getElementById('toggle');
-    if(p.type==='password'){p.type='text';t.textContent='🙈';}
-    else{p.type='password';t.textContent='👁️';}
+function togglePassword() {
+    const pass = document.getElementById("password");
+    const icon = document.querySelector(".toggle-password");
+    if (pass.type === "password") {
+        pass.type = "text";
+        icon.textContent = "🙈";
+    } else {
+        pass.type = "password";
+        icon.textContent = "👁️";
+    }
 }
 </script>
+
+<!-- Same footer as about.php – now connected via footer.php -->
+<?php include 'footer.php'; ?>
+
 </body>
 </html>
