@@ -137,7 +137,7 @@ footer {
 
   <div class="welcome-section">
     <div>
-      <h4>Welcome, <?= htmlspecialchars($client_name) ?> </h4>
+      <h4>Welcome, <?= htmlspecialchars($client_name) ?> 👋</h4>
       <div class="date"><?= $date ?></div>
     </div>
   </div>

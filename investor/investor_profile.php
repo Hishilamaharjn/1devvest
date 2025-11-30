@@ -99,7 +99,7 @@ body { font-family: 'Poppins', sans-serif; background: #f0f4f8; margin:0; }
 
 <div class="main">
   <div class="header">
-    <h4>Welcome, <?= htmlspecialchars($investor_name) ?> 👋</h4>
+    <h4>Welcome, <?=htmlspecialchars($investor_name)?> 👋</h4>
     <small><?= $date ?></small>
   </div>
 

@@ -195,7 +195,7 @@ body { font-family:'Poppins',sans-serif; background:#f5f7fa; margin:0; }
 <div class="main">
   <div class="d-flex justify-content-between align-items-center mb-5">
     <div>
-      <h4 class="fw-bold text-dark">Welcome back, <?= htmlspecialchars($client_name) ?> 👋</h4>
+      <h4>Welcome, <?= htmlspecialchars($client_name) ?> 👋</h4>
       <div class="text-muted"><i class="fa-regular fa-calendar"></i> <?= $date ?></div>
     </div>
     <a href="create_project.php" class="btn btn-primary shadow-sm">

@@ -141,7 +141,7 @@ body { font-family:'Poppins',sans-serif; background:#f8fafc; margin:0; }
 
     <div class="welcome-banner">
         <div>
-            <h2>Welcome, <?= htmlspecialchars($client_name) ?> <span class="wave">👋</span></h2>
+            <h4>Welcome, <?= htmlspecialchars($client_name) ?> 👋</h4>
             <div class="date"><?= date('l, F j, Y') ?></div>
         </div>
     </div><br>

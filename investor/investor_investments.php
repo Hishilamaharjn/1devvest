@@ -71,7 +71,7 @@ footer{text-align:center;margin-top:60px;color:#777;font-size:14px;}
 <div class="main">
   <div class="welcome-section">
     <div>
-      <h4>Welcome, @<?= htmlspecialchars($investor_name) ?> 👋</h4>
+      <h4>Welcome, <?=htmlspecialchars($investor_name)?> 👋</h4>
       <div class="date"><?= $date ?></div>
     </div>
     <div></div>

@@ -171,7 +171,7 @@ body { font-family: 'Poppins', sans-serif; background:#f5f7fa; min-height:100vh;
 <div class="main">
   <div class="header">
     <div class="header-left">
-      <h4>Welcome, <?= htmlspecialchars($admin_name) ?> Wave</h4>
+      <h4>Welcome, <?= htmlspecialchars($admin_name) ?> 👋</h4>
       <div class="date"><?= $date ?></div>
     </div>
   </div>

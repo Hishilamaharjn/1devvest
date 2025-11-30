@@ -128,7 +128,7 @@ body{font-family:'Poppins',sans-serif;background:#f5f7fa;margin:0;overflow-x:hid
 <div class="main">
   <div class="header d-flex justify-content-between align-items-center mb-4">
     <div>
-      <h4>Welcome back, <?= htmlspecialchars($investor_name) ?> </h4>
+      <h4>Welcome, <?=htmlspecialchars($investor_name)?> 👋</h4>
       <small class="date"><?= $date ?></small>
     </div>
   </div>
