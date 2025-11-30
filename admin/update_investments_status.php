@@ -16,7 +16,9 @@ if (!isset($_POST['investment_id']) || !isset($_POST['status'])) {
 $investment_id = intval($_POST['investment_id']);
 $status = trim($_POST['status']);
 
-if (!in_array($status, ['approved', 'pending', 'rejected'])) {
+// Allowed statuses
+$allowed_statuses = ['approved', 'pending', 'rejected'];
+if (!in_array($status, $allowed_statuses)) {
     echo json_encode(['success' => false, 'message' => 'Invalid status']);
     exit;
 }
@@ -28,10 +30,10 @@ try {
     $stmt = $pdo->prepare("UPDATE investor_projects SET status = ? WHERE id = ?");
     $stmt->execute([$status, $investment_id]);
 
-    // If rejected → mark amount as refunded (optional column) and notify
+    // Optional: mark refunded_at if rejected
     if ($status === 'rejected') {
-        // Optional: Add a refunded_at timestamp
-        $pdo->prepare("UPDATE investor_projects SET refunded_at = NOW() WHERE id = ?")->execute([$investment_id]);
+        $pdo->prepare("UPDATE investor_projects SET refunded_at = NOW() WHERE id = ?")
+            ->execute([$investment_id]);
     }
 
     $pdo->commit();
