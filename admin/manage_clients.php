@@ -1,9 +1,8 @@
-
 <?php  
 session_start();
 require '../db_connect.php';
 
-// ✅ Only admin allowed
+// Only admin allowed
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
     header("Location: ../login.php");
     exit;
@@ -11,87 +10,117 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
 
 $admin_name = $_SESSION['username'] ?? 'Admin';
 $date = date("l, F d, Y");
-$user_id = $_SESSION['user_id'];
 
-// ✅ Client Stats
+// Flash messages
+$success = $_SESSION['success'] ?? '';
+$error = $_SESSION['error'] ?? '';
+unset($_SESSION['success'], $_SESSION['error']);
+
+// Client Stats
 $total_clients = $pdo->query("SELECT COUNT(*) FROM users WHERE role='client'")->fetchColumn();
 $active_clients = $pdo->query("SELECT COUNT(*) FROM users WHERE role='client' AND status='active'")->fetchColumn();
 $inactive_clients = $total_clients - $active_clients;
 
-// --- Variables ---
+// Variables
 $edit_mode = false;
 $client_id = '';
 $username = '';
 $email = '';
-$error = '';
-$success = '';
 
-// --- Delete Client ---
-if (isset($_GET['delete_id'])) {
-    $delete_id = $_GET['delete_id'];
-    $stmt = $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'client'");
-    $stmt->execute([$delete_id]);
+// Toggle status
+if (isset($_GET['toggle'])) {
+    $id = (int)$_GET['toggle'];
+    $pdo->prepare("UPDATE users SET status = IF(status='active','inactive','active') WHERE id = ? AND role='client'")->execute([$id]);
+    $_SESSION['success'] = "Status updated!";
     header("Location: manage_clients.php");
     exit;
 }
 
-// --- Edit Client ---
+// Permanent Delete
+if (isset($_GET['delete_id'])) {
+    $id = (int)$_GET['delete_id'];
+    $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'client'")->execute([$id]);
+    $_SESSION['success'] = "Client deleted permanently.";
+    header("Location: manage_clients.php");
+    exit;
+}
+
+// Edit Mode
 if (isset($_GET['edit_id'])) {
     $edit_mode = true;
-    $client_id = $_GET['edit_id'];
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ? AND role = 'client'");
+    $client_id = (int)$_GET['edit_id'];
+    $stmt = $pdo->prepare("SELECT username, email FROM users WHERE id = ? AND role = 'client'");
     $stmt->execute([$client_id]);
-    $client = $stmt->fetch(PDO::FETCH_ASSOC);
+    $client = $stmt->fetch();
     if ($client) {
         $username = $client['username'];
         $email = $client['email'];
     } else {
-        $error = "Client not found.";
-        $edit_mode = false;
+        $_SESSION['error'] = "Client not found.";
+        header("Location: manage_clients.php");
+        exit;
     }
 }
 
-// --- Add / Update Client ---
+// Add / Update Client
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username']);
-    $email = trim($_POST['email']);
-    $password = trim($_POST['password'] ?? '');
+    $username = trim($_POST['username'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $client_id = !empty($_POST['client_id']) ? (int)$_POST['client_id'] : 0;
 
     if (empty($username) || empty($email)) {
         $error = "Username and email are required.";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = "Invalid email format.";
     } else {
-        if (!empty($_POST['client_id'])) {
-            // Update existing client
-            $client_id = $_POST['client_id'];
-            if (!empty($password)) {
-                $password_hashed = password_hash($password, PASSWORD_DEFAULT);
-                $stmt = $pdo->prepare("UPDATE users SET username=?, email=?, password=? WHERE id=? AND role='client'");
-                $stmt->execute([$username, $email, $password_hashed, $client_id]);
-            } else {
-                $stmt = $pdo->prepare("UPDATE users SET username=?, email=? WHERE id=? AND role='client'");
-                $stmt->execute([$username, $email, $client_id]);
-            }
-            $success = "Client updated successfully.";
+        // Check duplicate email
+        $check = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ? AND role='client'");
+        $check->execute([$email, $client_id]);
+        if ($check->rowCount() > 0) {
+            $error = "This email is already registered.";
         } else {
-            // Add new client
-            $password_hashed = password_hash($password ?: '123456', PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare("INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, 'client')");
-            $stmt->execute([$username, $email, $password_hashed]);
-            $success = "Client added successfully.";
+            if ($client_id) {
+                // Update
+                if (!empty($password)) {
+                    $hash = password_hash($password, PASSWORD_DEFAULT);
+                    $pdo->prepare("UPDATE users SET username=?, email=?, password=? WHERE id=?")->execute([$username, $email, $hash, $client_id]);
+                } else {
+                    $pdo->prepare("UPDATE users SET username=?, email=? WHERE id=?")->execute([$username, $email, $client_id]);
+                }
+                $_SESSION['success'] = "Client updated successfully!";
+            } else {
+                // Add new
+                $default_pass = empty($password) ? '123456' : $password;
+                $hash = password_hash($default_pass, PASSWORD_DEFAULT);
+                $pdo->prepare("INSERT INTO users (username, email, password, role, status) VALUES (?, ?, ?, 'client', 'active')")
+                     ->execute([$username, $email, $hash]);
+                $_SESSION['success'] = "Client added! Password: <strong>$default_pass</strong>";
+            }
+            $username = $email = '';
+            $edit_mode = false;
         }
-
-        $username = '';
-        $email = '';
-        $password = '';
-        $edit_mode = false;
     }
 }
 
-// --- Fetch all clients ---
-$stmt = $pdo->prepare("SELECT * FROM users WHERE role = 'client' ORDER BY id DESC");
-$stmt->execute();
+// Search
+$search = trim($_GET['search'] ?? '');
+$sql = "SELECT * FROM users WHERE role='client'";
+if ($search) {
+    $sql .= " AND (username LIKE ? OR email LIKE ?)";
+}
+$sql .= " ORDER BY id DESC";
+
+if ($search) {
+    $stmt = $pdo->prepare($sql);
+    $like = "%$search%";
+    $stmt->execute([$like, $like]);
+} else {
+    $stmt = $pdo->query($sql);
+}
 $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -111,7 +140,6 @@ body { font-family: 'Poppins', sans-serif; background:#f5f7fa; min-height:100vh;
 .header { display:flex; justify-content:space-between; align-items:center; margin-bottom:35px; flex-wrap:wrap;}
 .header-left h4 { font-weight:700; color:#1e293b; margin:0; }
 .header-left .date { color:#64748b; font-size:14px;}
-.profile-pic { width:60px; height:60px; border-radius:50%; object-fit:cover; border:2px solid #2563eb;}
 .stats { display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:25px; margin-bottom:40px;}
 .stat-card { border-radius:15px; padding:20px; text-align:center; color:#fff; box-shadow:0 8px 25px rgba(0,0,0,0.1);}
 .stat-card i { font-size:36px; margin-bottom:12px;}
@@ -125,6 +153,7 @@ body { font-family: 'Poppins', sans-serif; background:#f5f7fa; min-height:100vh;
 .table tbody tr:hover {background-color:#f3f6fc;}
 .section-title {font-weight:600;color:#1e293b;margin-top:30px;margin-bottom:20px;}
 .card {background:#fff;border-radius:15px; padding:20px; box-shadow:0 5px 15px rgba(0,0,0,0.1);}
+.toast-container { position:fixed; bottom:20px; right:20px; z-index:9999; }
 </style>
 </head>
 <body>
@@ -142,10 +171,29 @@ body { font-family: 'Poppins', sans-serif; background:#f5f7fa; min-height:100vh;
 <div class="main">
   <div class="header">
     <div class="header-left">
-      <h4>Welcome, <?= htmlspecialchars($admin_name) ?> 👋</h4>
+      <h4>Welcome, <?= htmlspecialchars($admin_name) ?> Wave</h4>
       <div class="date"><?= $date ?></div>
     </div>
-    
+  </div>
+
+  <!-- Toast Notifications -->
+  <div class="toast-container">
+    <?php if($success): ?>
+      <div class="toast show align-items-center text-bg-success border-0" role="alert">
+        <div class="d-flex">
+          <div class="toast-body"><?= $success ?></div>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+        </div>
+      </div>
+    <?php endif; ?>
+    <?php if($error): ?>
+      <div class="toast show align-items-center text-bg-danger border-0" role="alert">
+        <div class="d-flex">
+          <div class="toast-body"><?= htmlspecialchars($error) ?></div>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+        </div>
+      </div>
+    <?php endif; ?>
   </div>
 
   <!-- Stats Cards -->
@@ -155,27 +203,37 @@ body { font-family: 'Poppins', sans-serif; background:#f5f7fa; min-height:100vh;
     <div class="stat-card"><i class="fa-solid fa-user-slash"></i><h5>Inactive Clients</h5><h3><?= $inactive_clients ?></h3></div>
   </div>
 
-  <!-- Add/Edit Client Form -->
+  <!-- Search -->
+  <form class="mb-4">
+    <div class="input-group" style="max-width:400px;">
+      <input type="text" name="search" class="form-control" placeholder="Search by username or email..." value="<?= htmlspecialchars($search) ?>">
+      <button class="btn btn-primary"><i class="fa-solid fa-search"></i></button>
+    </div>
+  </form>
+
+  <!-- Add/Edit Form -->
   <h4 class="section-title"><?= $edit_mode ? 'Edit Client' : 'Add New Client' ?></h4>
-  <?php if($error): ?><p class="text-danger"><?= $error ?></p><?php endif; ?>
-  <?php if($success): ?><p class="text-success"><?= $success ?></p><?php endif; ?>
   <div class="card mb-4">
-    <form method="POST" action="manage_clients.php">
-      <input type="hidden" name="client_id" value="<?= htmlspecialchars($client_id) ?>">
-      <div class="mb-3">
-        <label>Username</label>
-        <input type="text" name="username" class="form-control" value="<?= htmlspecialchars($username) ?>" required>
+    <form method="POST">
+      <input type="hidden" name="client_id" value="<?= $edit_mode ? $client_id : '' ?>">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label>Username</label>
+          <input type="text" name="username" class="form-control" value="<?= htmlspecialchars($username) ?>" required>
+        </div>
+        <div class="col-md-4">
+          <label>Email</label>
+          <input type="email" name="email" class="form-control" value="<?= htmlspecialchars($email) ?>" required>
+        </div>
+        <div class="col-md-4">
+          <label>Password <small class="text-muted">(leave blank = <?= $edit_mode?'keep current':'123456' ?>)</small></label>
+          <input type="password" name="password" class="form-control">
+        </div>
       </div>
-      <div class="mb-3">
-        <label>Email</label>
-        <input type="email" name="email" class="form-control" value="<?= htmlspecialchars($email) ?>" required>
+      <div class="mt-3">
+        <button type="submit" class="btn btn-primary"><?= $edit_mode ? 'Update Client' : 'Add Client' ?></button>
+        <?php if($edit_mode): ?><a href="manage_clients.php" class="btn btn-secondary ms-2">Cancel</a><?php endif; ?>
       </div>
-      <div class="mb-3">
-        <label>Password <small>(leave blank to keep unchanged)</small></label>
-        <input type="password" name="password" class="form-control">
-      </div>
-      <button type="submit" class="btn btn-primary"><?= $edit_mode ? 'Update Client' : 'Add Client' ?></button>
-      <?php if($edit_mode): ?><a href="manage_clients.php" class="btn btn-secondary ms-2">Cancel</a><?php endif; ?>
     </form>
   </div>
 
@@ -184,26 +242,37 @@ body { font-family: 'Poppins', sans-serif; background:#f5f7fa; min-height:100vh;
   <div class="table-responsive">
     <table class="table table-bordered table-hover align-middle">
       <thead>
-        <tr><th>#</th><th>Username</th><th>Email</th><th>Action</th></tr>
+        <tr><th>#</th><th>Username</th><th>Email</th><th>Status</th><th>Action</th></tr>
       </thead>
       <tbody>
-        <?php if ($clients): foreach ($clients as $i=>$c): ?>
+        <?php foreach ($clients as $i => $c): ?>
         <tr>
           <td><?= $i+1 ?></td>
           <td><?= htmlspecialchars($c['username']) ?></td>
           <td><?= htmlspecialchars($c['email']) ?></td>
           <td>
-            <a href="manage_clients.php?edit_id=<?= $c['id'] ?>" class="btn btn-sm btn-warning"><i class="fa-solid fa-pen"></i></a>
-            <a href="manage_clients.php?delete_id=<?= $c['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Delete this client?')"><i class="fa-solid fa-trash"></i></a>
+            <a href="?toggle=<?= $c['id'] ?>" class="badge bg-<?= $c['status']==='active'?'success':'danger' ?>">
+              <?= ucfirst($c['status'] ?? 'active') ?>
+            </a>
+          </td>
+          <td>
+            <a href="?edit_id=<?= $c['id'] ?>" class="btn btn-sm btn-warning"><i class="fa-solid fa-pen"></i></a>
+            <a href="?delete_id=<?= $c['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Delete this client permanently?')"><i class="fa-solid fa-trash"></i></a>
           </td>
         </tr>
-        <?php endforeach; else: ?>
-        <tr><td colspan="4" class="text-center text-muted">No clients found.</td></tr>
+        <?php endforeach; ?>
+        <?php if(empty($clients)): ?>
+        <tr><td colspan="5" class="text-center text-muted py-4">No clients found.</td></tr>
         <?php endif; ?>
       </tbody>
     </table>
   </div>
-
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // Auto hide toasts after 4 seconds
+  document.querySelectorAll('.toast').forEach(t => new bootstrap.Toast(t, {delay: 4000}).show());
+</script>
 </body>
 </html>

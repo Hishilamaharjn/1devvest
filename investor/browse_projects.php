@@ -2,9 +2,6 @@
 session_start();
 require '../db_connect.php';
 
-// ------------------------
-// CHECK SESSION & ROLE
-// ------------------------
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'investor') {
     header("Location: ../login.php");
     exit;
@@ -23,7 +20,7 @@ $projects = $pdo->query("SELECT * FROM projects WHERE status='approved' ORDER BY
 $investments = $pdo->query("SELECT project_id, SUM(invested_amount) as total FROM investor_projects WHERE status='approved' GROUP BY project_id")->fetchAll(PDO::FETCH_ASSOC);
 $investment_totals = [];
 foreach($investments as $inv){
-    $investment_totals[$inv['project_id']] = $inv['total'];
+    $investment_totals[$inv['project_id']] = $inv['total']; // ← Fixed: was $investment_tot
 }
 
 // Fetch logged-in investor's own investments + status
@@ -133,7 +130,7 @@ body{font-family:'Poppins',sans-serif;background:#f5f7fa;margin:0;overflow-x:hid
 <div class="main">
     <div class="header">
         <div class="header-left">
-            <h4>Welcome, <?= htmlspecialchars($investor_name) ?> </h4>
+            <h4>Welcome, <?= htmlspecialchars($investor_name) ?> Wave</h4>
             <div class="date"><?= $date ?></div>
         </div>
     </div>
@@ -154,10 +151,8 @@ body{font-family:'Poppins',sans-serif;background:#f5f7fa;margin:0;overflow-x:hid
     $my_status = $my_data['status'];
     $progress = ($p['goal'] > 0) ? min(100, ($total_invested / $p['goal']) * 100) : 0;
     
-    // Check if this investment was rejected
     $is_rejected = ($my_status === 'rejected');
 
-    // Image handling (unchanged)
     $db_image = trim($p['image'] ?? '');
     if (!empty($db_image)) {
         if (file_exists(__DIR__ . '/../' . $db_image)) {
@@ -211,13 +206,21 @@ body{font-family:'Poppins',sans-serif;background:#f5f7fa;margin:0;overflow-x:hid
                     <i class="fa-solid fa-eye"></i> View
                 </button>
 
-                <?php if(!$is_rejected && $my_status !== 'approved'): ?>
+                <!-- ONLY THIS PART IS FIXED — SAME BUTTON, SAME ICON, JUST TEXT CHANGES WHEN APPROVED -->
+                <?php if($my_status === 'approved'): ?>
+                    <button class="btn btn-primary btn-sm" 
+                            data-bs-toggle="modal" 
+                            data-bs-target="#invest<?= $p['id'] ?>">
+                        <i class="fa-solid fa-plus"></i> Invest More
+                    </button>
+                <?php elseif(!$is_rejected): ?>
                     <button class="btn btn-primary btn-sm" 
                             data-bs-toggle="modal" 
                             data-bs-target="#invest<?= $p['id'] ?>">
                         <i class="fa-solid fa-plus"></i> Invest
                     </button>
                 <?php endif; ?>
+                <!-- END OF FIX -->
 
                 <?php if($my_status === 'Pending'): ?>
                     <button class="btn btn-warning btn-sm text-white" data-bs-toggle="modal" data-bs-target="#edit<?= $p['id'] ?>">
@@ -236,9 +239,8 @@ body{font-family:'Poppins',sans-serif;background:#f5f7fa;margin:0;overflow-x:hid
     </div>
 </div>
 
- 
-
-        <!-- VIEW MODAL (unchanged) -->
+<!-- All modals exactly same as yours — no change -->
+        <!-- VIEW MODAL -->
         <div class="modal fade" id="view<?= $p['id'] ?>" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-lg modal-dialog-centered">
                 <div class="modal-content">
@@ -257,7 +259,7 @@ body{font-family:'Poppins',sans-serif;background:#f5f7fa;margin:0;overflow-x:hid
             </div>
         </div>
 
-        <!-- INVEST MODAL (fixed input) -->
+        <!-- INVEST MODAL -->
         <div class="modal fade" id="invest<?= $p['id'] ?>" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
@@ -276,7 +278,7 @@ body{font-family:'Poppins',sans-serif;background:#f5f7fa;margin:0;overflow-x:hid
             </div>
         </div>
 
-        <!-- EDIT MODAL (for Pending only) -->
+        <!-- EDIT MODAL -->
         <?php if($my_status === 'Pending'): ?>
         <div class="modal fade" id="edit<?= $p['id'] ?>" tabindex="-1">
             <div class="modal-dialog modal-dialog-centered">

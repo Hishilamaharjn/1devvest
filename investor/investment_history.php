@@ -47,24 +47,42 @@ if ($investor_id) {
 }
 
 // ------------------------
-// Prepare data for charts
+// Prepare data (now with Rejected support)
 // ------------------------
-$status_counts = ["Pending" => 0, "Approved" => 0, "Completed" => 0];
+$status_counts = ["Pending" => 0, "Approved" => 0, "Rejected" => 0];
 $project_amounts = [];
 $investments_view = [];
 
 foreach ($investments as $inv) {
-    $status_norm = ucfirst(strtolower($inv['status'] ?? 'Pending'));
-    if (!isset($status_counts[$status_norm])) $status_norm = 'Pending';
+    $status_raw = $inv['status'] ?? 'pending';
+    $status_norm = ucfirst(strtolower($status_raw));
+
+    // Normalize status
+    if (!in_array($status_norm, ['Pending', 'Approved', 'Rejected'])) {
+        $status_norm = 'Pending';
+    }
+
+    // Count for pie chart
     $status_counts[$status_norm]++;
 
     $pname = $inv['project_name'] ?? 'Untitled Project';
-    $project_amounts[$pname] = (float)($inv['total_invested'] ?? 0);
+    $amount = (float)($inv['total_invested'] ?? 0);
 
-    $status_class = ($status_norm === 'Approved') ? 'badge-approved' : (($status_norm === 'Completed') ? 'badge-completed' : 'badge-pending');
+    // Only approved amounts go into the "Amount by Project" chart
+    if ($status_norm === 'Approved') {
+        $project_amounts[$pname] = $amount;
+    }
+
+    // Badge class
+    $badge_class = match($status_norm) {
+        'Approved' => 'badge-approved',
+        'Rejected' => 'badge-rejected',
+        default => 'badge-pending'
+    };
 
     $inv['display_status'] = $status_norm;
-    $inv['status_class'] = $status_class;
+    $inv['status_class'] = $badge_class;
+    $inv['amount_formatted'] = number_format($amount, 2);
     $investments_view[] = $inv;
 }
 ?>
@@ -94,7 +112,9 @@ tr:hover{background:#f1f5ff;}
 .badge-status{padding:5px 10px;border-radius:6px;font-size:13px;}
 .badge-pending{background:#facc15;color:#000;}
 .badge-approved{background:#4ade80;color:#fff;}
-.badge-completed{background:#3b82f6;color:#fff;}
+.badge-rejected{background:#ef4444;color:#fff;}
+.rejected-row{background:#fff5f5;}
+.alert-rejected{background:#fef2f2;border-left:5px solid #dc2626;padding:12px;border-radius:8px;margin:10px 0;font-size:0.9rem;}
 .chart-container{display:flex;flex-wrap:wrap;gap:20px;margin-top:20px;justify-content:flex-start;}
 .chart-box{flex:1;min-width:180px;max-width:300px;background:#fff;padding:15px;border-radius:12px;box-shadow:0 6px 15px rgba(0,0,0,0.08);}
 footer{text-align:center;color:#64748b;margin-top:30px;font-size:14px;}
@@ -134,15 +154,31 @@ footer{text-align:center;color:#64748b;margin-top:30px;font-size:14px;}
         </tr>
       </thead>
       <tbody>
-      <?php foreach($investments_view as $i=>$inv): ?>
-        <tr>
+      <?php foreach($investments_view as $i=>$inv): 
+        $is_rejected = ($inv['display_status'] === 'Rejected');
+      ?>
+        <tr class="<?= $is_rejected ? 'rejected-row' : '' ?>">
           <td><?=$i+1?></td>
           <td><?=htmlspecialchars($inv['project_name'])?></td>
           <td><?=htmlspecialchars($inv['client_name'])?></td>
           <td><strong><?=number_format($inv['total_invested'],2)?></strong></td>
-          <td><span class="badge-status <?=htmlspecialchars($inv['status_class'])?>"><?=htmlspecialchars($inv['display_status'])?></span></td>
+          <td>
+            <span class="badge-status <?= $is_rejected ? 'badge-rejected' : htmlspecialchars($inv['status_class']) ?>">
+              <?= $is_rejected ? 'Rejected' : htmlspecialchars($inv['display_status']) ?>
+            </span>
+          </td>
           <td><?= $inv['last_invested_at'] ? date("F d, Y - h:i A", strtotime($inv['last_invested_at'])) : '-' ?></td>
         </tr>
+        <?php if($is_rejected): ?>
+        <tr class="rejected-row">
+          <td colspan="6">
+            <div class="alert-rejected">
+              <i class="fa-solid fa-info-circle"></i> 
+              <strong>Investment Rejected</strong> – Your amount of Rs. <?= $inv['amount_formatted'] ?> has been fully refunded.
+            </div>
+          </td>
+        </tr>
+        <?php endif; ?>
       <?php endforeach; ?>
       </tbody>
     </table>
@@ -151,7 +187,7 @@ footer{text-align:center;color:#64748b;margin-top:30px;font-size:14px;}
     <?php endif; ?>
   </div>
 
-  <!-- Compact Pie Charts -->
+  <!-- Updated Pie Charts with Rejected Status -->
   <div class="chart-container">
       <div class="chart-box">
           <h6>Status Overview</h6>
@@ -168,26 +204,36 @@ footer{text-align:center;color:#64748b;margin-top:30px;font-size:14px;}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Pie Chart 1: Status
+// Updated Status Pie Chart — Now includes Rejected!
 new Chart(document.getElementById("statusPie"), {
     type: "pie",
     data: {
-        labels: ["Pending","Approved","Completed"],
-        datasets:[{data:[<?= $status_counts["Pending"] ?>,<?= $status_counts["Approved"] ?>,<?= $status_counts["Completed"] ?>],
-            backgroundColor:["#facc15","#4ade80","#3b82f6"]
+        labels: ["Pending", "Approved", "Rejected"],
+        datasets: [{
+            data: [<?= $status_counts["Pending"] ?>, <?= $status_counts["Approved"] ?>, <?= $status_counts["Rejected"] ?>],
+            backgroundColor: ["#facc15", "#4ade80", "#ef4444"]
         }]
     },
-    options:{
-        responsive:true,
-        plugins:{legend:{position:'bottom',labels:{boxWidth:12}},tooltip:{enabled:true}}
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12 } },
+            tooltip: { enabled: true }
+        }
     }
 });
 
-// Pie Chart 2: Amount per Project
+// Amount by Project (unchanged — only approved amounts)
 const projectColors = ["#6366f1","#10b981","#f59e0b","#ef4444","#3b82f6","#8b5cf6","#f43f5e","#0ea5e9","#eab308","#14b8a6"];
 new Chart(document.getElementById("amountPie"),{
     type:"pie",
-    data:{labels:<?= json_encode(array_keys($project_amounts)) ?>,datasets:[{data:<?= json_encode(array_values($project_amounts)) ?>,backgroundColor:projectColors}]},
+    data:{
+        labels: <?= json_encode(array_keys($project_amounts)) ?>,
+        datasets:[{
+            data: <?= json_encode(array_values($project_amounts)) ?>,
+            backgroundColor: projectColors
+        }]
+    },
     options:{
         responsive:true,
         plugins:{
